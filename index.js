@@ -1,10 +1,17 @@
 const fse = require('fs-extra')
 const archiver = require('archiver')
 const fs = require('fs')
+const walk = require('walk')
+var rimraf = require('rimraf');
 
-const source = 'z:\\早教';
-const copy_target = 'd:\\file-server';
-const archive_target = 'd:\\archive-server\\example.zip';
+
+//设定源路径和复制后的目标路径
+const source = '/Users/dudu/Desktop/test_archive';
+const copy_target = '/Users/dudu/Desktop/test_archive_copy';
+
+//设定要打包的路径名称
+const filter = ['设计稿']
+
 
 
 fse.emptyDir(copy_target, err => {
@@ -13,19 +20,43 @@ fse.emptyDir(copy_target, err => {
 	fse.copy(source, copy_target, err => {
 		if (err) return console.error(err)
 		console.log('copy success!')
-		archiver ();
+		start_walk()
 	})
 })
 
+function start_walk () {
+	var walker = walk.walk(copy_target);
+	
+	walker.on("directory", function (root, fileStats, next) {
+		filter.forEach(function(str){
+			if(fileStats.name === str) {
+				start_archive(root, fileStats, next)
+			}
+		})
+		
+		next();
+	});
+	
+	walker.on("errors", function (root, nodeStatsArray, next) {
+		next();
+	});
+	
+	walker.on("end", function () {
+		console.log("all done");
+	});
+}
 
-function archiver () {
-	var output = fs.createWriteStream(archive_target);
-	var input = fs.createReadStream(copy_target);
-	var archive = archiver('zip', {
-		zlib: { level: 9 } // Sets the compression level.
-	})
-	archive.directory('d:\\file-server\早教', 'd:\\archive-server\\早教');
-	// good practice to catch warnings (ie stat failures and other non-blocking errors)
+function start_archive (root,fileStats,next) {
+	const output = fs.createWriteStream( root + '/' + fileStats.name + '.zip');
+	const archive = archiver('zip', {
+		zlib: { level: 9 }
+	});
+	archive.directory(root + '/' + fileStats.name, fileStats.name)
+	output.on('close', function() {
+		rimraf(root + '/' + fileStats.name, function () {
+			console.log('压缩和删除完成');
+		});
+	});
 	archive.on('warning', function(err) {
 		if (err.code === 'ENOENT') {
 			// log warning
@@ -34,11 +65,9 @@ function archiver () {
 			throw err;
 		}
 	});
-
-	// good practice to catch this error explicitly
 	archive.on('error', function(err) {
 		throw err;
 	});
-	archive.pipe(output)
+	archive.pipe(output);
 	archive.finalize();
 }
